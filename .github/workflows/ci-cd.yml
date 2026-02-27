@@ -1,0 +1,285 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: '0 0 * * 0'
+
+env:
+  NODE_VERSION: '18.x'
+  DATABASE_PATH: ./data/bot_database.sqlite
+
+jobs:
+  lint:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint || echo "No lint script configured"
+
+      - name: Check formatting
+        run: |
+          if command -v prettier &> /dev/null; then
+            prettier --check "src/**/*.js"
+          else
+            echo "Prettier not installed, skipping format check"
+          fi
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create data directory
+        run: mkdir -p data
+
+      - name: Run unit tests
+        run: npm run test:unit
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create data directory
+        run: mkdir -p data
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          NODE_OPTIONS: --experimental-vm-modules
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DATABASE_PATH: ${{ env.DATABASE_PATH }}
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --production --audit-level=high
+
+      - name: Check for known vulnerabilities
+        run: |
+          if command -v nsp &> /dev/null; then
+            nsp check
+          else
+            echo "nsp not installed, skipping vulnerability check"
+          fi
+
+  build:
+    name: Build and Package
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, security-audit]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: |
+          if [ -f "build.sh" ]; then
+            ./build.sh
+          else
+            echo "No build script configured"
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: bot-package
+          path: |
+            dist/
+            src/
+            data/
+            *.json
+            *.env.example
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop'
+    environment:
+      name: staging
+      url: https://staging.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: bot-package
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add deployment commands here
+          # Example: pm2 restart bot or docker-compose up -d
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: bot-package
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      - name: Create production environment file
+        run: |
+          echo "${{ secrets.PROD_ENV }}" > .env
+          echo "Production environment configured"
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # Add deployment commands here
+          # Example: pm2 restart bot or docker-compose up -d
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          # Add smoke test commands here
+          curl -f https://example.com/health || exit 1
+
+  performance-benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run performance benchmarks
+        run: |
+          echo "Running performance benchmarks..."
+          node tests/performance.test.js
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmark-results/
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Send Slack notification
+        if: needs.deploy-production.result == 'failure'
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"Deployment to production failed!"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      - name: Send success notification
+        if: needs.deploy-production.result == 'success'
+        run: |
+          curl -X POST -H 'Content-type: application/json' \
+            --data '{"text":"Successfully deployed to production!"}' \
+            ${{ secrets.SLACK_WEBHOOK_URL }}

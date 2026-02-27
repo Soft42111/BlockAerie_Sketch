@@ -1,0 +1,48 @@
+{
+  "name": "blockaerie-sketch",
+  "version": "1.0.0",
+  "description": "Discord bot that generates high-quality AI image prompts for web3/NFT-styled profile pictures",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "dashboard": "node src/utils/dashboard.js",
+    "both": "node src/index.js & node src/utils/dashboard.js",
+    "start-all": "node start-all.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "ai",
+    "prompt-generator",
+    "web3",
+    "nft",
+    "pfp",
+    "gemini"
+  ],
+  "author": "Basit",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@google/genai": "^1.40.0",
+    "@sogni-ai/sogni-client-wrapper": "^1.4.0",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.6.2",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.22.1",
+    "ffmpeg-static": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "sogni-gen": "^1.2.2",
+    "uuid": "^9.0.1",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
